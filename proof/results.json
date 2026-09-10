@@ -1,0 +1,156 @@
+{
+  "purpose": "Synthetic design validation, not production performance guarantee",
+  "environment": {
+    "python": "3.12.3",
+    "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu": "AMD Ryzen 7 4800H with Radeon Graphics",
+    "bash": "GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)",
+    "argcomplete": "3.7.2",
+    "synthetic_sdk_import_delay_ms": 500
+  },
+  "checks": {
+    "optimized_scenarios_no_sdk_import": true,
+    "optimized_benchmark_no_sdk_import": true,
+    "real_command_imports_sdk_and_executes": true,
+    "upgraded_completion_no_sdk_import": true,
+    "exact_completion_scenarios": true,
+    "same_bash_process_and_unchanged_registration_after_upgrade": true,
+    "eager_imports_sdk_for_every_completion": true
+  },
+  "completion_results": {
+    "v1_commands": [
+      "--help",
+      "-h",
+      "legacy",
+      "list"
+    ],
+    "v1_options": [
+      "--color",
+      "--help",
+      "--item",
+      "--old"
+    ],
+    "v1_choices": [
+      "blue",
+      "green",
+      "red"
+    ],
+    "cwd_one": [
+      "one.item"
+    ],
+    "cwd_two": [
+      "two.item"
+    ],
+    "v2_commands": [
+      "--help",
+      "-h",
+      "list",
+      "modern"
+    ],
+    "v2_options": [
+      "--color",
+      "--help",
+      "--item",
+      "--new"
+    ],
+    "v2_choices": [
+      "blue",
+      "yellow"
+    ],
+    "v2_removed_command": []
+  },
+  "shell": {
+    "registration_before": "complete -o nospace -F _python_argcomplete reef-proof",
+    "shell_before": "1966026",
+    "eager_imports": "31",
+    "registration_after": "complete -o nospace -F _python_argcomplete reef-proof",
+    "shell_after": "1966026"
+  },
+  "completion_latency": {
+    "optimized": {
+      "samples": 30,
+      "p50_ms": 39.178,
+      "p95_ms": 44.366,
+      "raw_ms": [
+        38.33,
+        44.366,
+        39.782,
+        39.892,
+        39.676,
+        41.437,
+        39.991,
+        44.338,
+        42.057,
+        41.711,
+        39.963,
+        49.881,
+        41.957,
+        40.852,
+        40.176,
+        35.895,
+        35.283,
+        36.784,
+        36.509,
+        37.562,
+        35.176,
+        38.679,
+        36.146,
+        35.53,
+        35.498,
+        36.169,
+        36.929,
+        36.903,
+        40.403,
+        35.974
+      ]
+    },
+    "eager": {
+      "samples": 30,
+      "p50_ms": 537.566,
+      "p95_ms": 540.452,
+      "raw_ms": [
+        536.195,
+        538.817,
+        536.653,
+        535.341,
+        537.589,
+        535.976,
+        538.623,
+        538.023,
+        536.48,
+        536.81,
+        540.452,
+        538.357,
+        538.229,
+        537.04,
+        537.322,
+        537.585,
+        538.421,
+        537.929,
+        541.351,
+        539.696,
+        537.911,
+        537.422,
+        537.547,
+        537.136,
+        538.251,
+        538.103,
+        536.224,
+        537.224,
+        537.544,
+        536.775
+      ]
+    }
+  },
+  "measurement": "Bash EPOCHREALTIME around the registered argcomplete function; one unrecorded warmup per variant; new Python process for each request; optimized series precedes eager series; p95 is nearest rank.",
+  "limitations": [
+    "Synthetic 500 ms sleep represents import latency; no real SDK was benchmarked.",
+    "Calls the actually registered Bash completion function with completion variables; does not drive interactive Readline TAB keystrokes.",
+    "The noninteractive function call cannot exercise Readline compopt behavior.",
+    "Only one machine, Python version, argcomplete version and basic parser grammar tested.",
+    "No network completers, custom argparse actions/types, plugins or environment switching tested.",
+    "No concurrent pip upgrade/completion race tested.",
+    "Deferred helper is a minimal embedded prototype, not a production package."
+  ]
+}
