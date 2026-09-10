@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Reproducible Linux design experiment. Run with Python 3.12; requires Bash and pip access.
+"""Reproducible Linux wheel validation. Requires Python 3.12, uv, Bash and PyPI access.
 
 All environments and fixture builds live in a temporary directory. This writes
-results.json beside this script. It is not an installable production package.
+results.json beside this script and tests the wheel supplied through --wheel.
 """
 
+import argparse
+import hashlib
 import json
 import math
 import os
@@ -19,26 +21,11 @@ import textwrap
 
 SAMPLES = 30
 
-DEFERRED = '''\
-from importlib import import_module
-
-def deferred(reference):
-    module, function = reference.split(":")
-    if not all(part.isidentifier() for part in module.split(".")) or not function.isidentifier():
-        raise ValueError("Expected module:function")
-
-    def invoke(*args, **kwargs):
-        target = getattr(import_module(module), function)
-        return target(*args, **kwargs)
-
-    return invoke
-'''
-
 CLI = '''\
 import argparse
 from pathlib import Path
 import argcomplete
-from .booster import deferred
+from autocomplete_booster import deferred
 
 def items(prefix, **kwargs):
     return [p.name for p in Path.cwd().glob("*.item")
@@ -167,13 +154,12 @@ def fixture(root, version, command):
         [project]
         name = "reef-autocomplete-proof-fixture"
         version = "{version}"
-        dependencies = ["argcomplete==3.7.2"]
+        dependencies = ["autocomplete-booster==0.1.0", "argcomplete==3.7.2"]
         [project.scripts]
         reef-proof = "fixture.cli:main"
         reef-proof-eager = "fixture.eager:main"
     ''')
     write(package / '__init__.py', '')
-    write(package / 'booster.py', DEFERRED)
     write(package / 'cli.py', f'VERSION_COMMAND = {command!r}\n' + CLI)
     write(package / 'sdk.py', SDK)
     write(package / 'eager.py', 'from . import sdk\nfrom .cli import main\n')
@@ -184,16 +170,28 @@ def checked(command, **kwargs):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--wheel', required=True, type=Path,
+                        help='Wheel built by uv build for autocomplete-booster 0.1.0')
+    args = parser.parse_args()
+    wheel = args.wheel.resolve(strict=True)
+    if not wheel.is_file() or wheel.suffix != '.whl':
+        parser.error('--wheel must refer to an existing .whl file')
     assert sys.version_info[:2] == (3, 12), 'Run this experiment with Python 3.12'
     with tempfile.TemporaryDirectory(prefix='reef-autocomplete-proof-') as temp:
         root = Path(temp)
         env_root = root / 'venv'
         fixture(root / 'v1', '1.0.0', 'legacy')
         fixture(root / 'v2', '2.0.0', 'modern')
-        checked([sys.executable, '-m', 'venv', str(env_root)])
+        checked(['uv', 'venv', '--seed', '--python', sys.executable, str(env_root)])
         python = str(env_root / 'bin' / 'python')
         checked([python, '-m', 'pip', 'install', '--disable-pip-version-check',
-                 'argcomplete==3.7.2', 'setuptools==84.0.0', 'wheel==0.48.0'])
+                 str(wheel), 'argcomplete==3.7.2', 'setuptools==84.0.0', 'wheel==0.48.0'])
+        installed_version = checked([
+            python, '-c', 'from importlib.metadata import version; '
+            'print(version("autocomplete-booster"))',
+        ]).stdout.strip()
+        assert installed_version == '0.1.0', installed_version
         checked([python, '-m', 'pip', 'install', '--disable-pip-version-check',
                  '--no-build-isolation', '--no-deps', str(root / 'v1')])
         environment = os.environ | {
@@ -244,6 +242,8 @@ def main():
             }
         result = {
             'purpose': 'Synthetic design validation, not production performance guarantee',
+            'wheel': {'filename': wheel.name, 'sha256': hashlib.sha256(wheel.read_bytes()).hexdigest(),
+                      'installed_version': installed_version},
             'environment': {'python': platform.python_version(), 'platform': platform.platform(),
                             'machine': platform.machine(),
                             'cpu': next(line.split(':', 1)[1].strip()
@@ -264,7 +264,6 @@ def main():
                 'Only one machine, Python version, argcomplete version and basic parser grammar tested.',
                 'No network completers, custom argparse actions/types, plugins or environment switching tested.',
                 'No concurrent pip upgrade/completion race tested.',
-                'Deferred helper is a minimal embedded prototype, not a production package.',
             ],
         }
         destination = Path(__file__).with_name('results.json')

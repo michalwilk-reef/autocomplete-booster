@@ -10,6 +10,26 @@ permissions:
   contents: read
 
 jobs:
+  unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.14']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: '0.12.12'
+      - name: Install and test the built wheel
+        run: |
+          uv sync --locked --no-install-project --python '${{ matrix.python-version }}'
+          uv build
+          uv pip install --python .venv/bin/python dist/autocomplete_booster-0.1.0-py3-none-any.whl
+          uv run --no-sync --python '${{ matrix.python-version }}' pytest -q
+
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -19,20 +39,28 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          python-version: '3.12'
+          version: '0.12.12'
+
+      - name: Build the installable distributions
+        run: |
+          uv sync --locked
+          uv build
 
       - name: Verify completion, imports, and pip upgrade behavior
         run: |
           rm proof/results.json
-          python proof/validate.py
+          uv run --locked python proof/validate.py --wheel dist/autocomplete_booster-0.1.0-py3-none-any.whl
 
       - name: Save this run's measurements
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: autocomplete-validation-results
-          path: proof/results.json
+          name: autocomplete-package-and-validation
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            proof/results.json
           if-no-files-found: error
           retention-days: 14

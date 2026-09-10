@@ -248,16 +248,18 @@ arbitrary application post-install hook will rebuild a user's shell state.
 
 ## Validation
 
-The accompanying proof is a focused design experiment, not a production package
-release. It uses a synthetic SDK module with an intentionally slow import.
+The interface is implemented as the installable `autocomplete-booster` package
+in `src/autocomplete_booster`. Its accompanying proof installs the built wheel
+with pip and uses a synthetic SDK module with an intentionally slow import.
 Its purpose is to test the import separation, completion behavior and upgrade
 claim with actual installed fixtures. Results are recorded separately so they
 can be reproduced without treating hardware-specific timings as a guarantee.
 
-Included evidence: `validate.py` is a self-contained script, `README.md` gives
-reproduction instructions, and `results.json` contains assertions, versions
-and every timing sample. Run the script with Python 3.12, Bash 5, and access to
-PyPI; it creates and removes its own temporary environment. Fixture versions
+Included evidence: `proof/validate.py` consumes the wheel built by `uv build`,
+`proof/README.md` gives reproduction instructions, and `proof/results.json`
+contains assertions, versions and every timing sample. Use uv, Python 3.12,
+Bash 5 and access to PyPI; the script creates and removes its own temporary
+environment with uv, then installs the wheel using pip. Fixture versions
 are built and installed through pip as ordinary non-editable installations.
 The upgrade uses `pip install -U <local-v2-project>` so no fixture needs to be
 published.
@@ -267,8 +269,8 @@ on an AMD Ryzen 7 4800H:
 
 | Completion path | Samples | Median | p95 |
 | --- | ---: | ---: | ---: |
-| Eager SDK import | 30 | 537.566 ms | 540.452 ms |
-| Deferred handler | 30 | 39.178 ms | 44.366 ms |
+| Eager SDK import | 30 | 536.722 ms | 541.283 ms |
+| Deferred handler | 30 | 35.676 ms | 40.451 ms |
 
 The fixture SDK deliberately sleeps 500 ms during import. Each sample starts
 a new Python process; Bash times the registered completion function, with
