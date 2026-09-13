@@ -1,4 +1,4 @@
-name: Validate fastcomplete design proof
+name: Test real CLI integration
 
 on:
   push:
@@ -10,51 +10,19 @@ permissions:
   contents: read
 
 jobs:
-  unit-tests:
+  issuecli:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [ubuntu-24.04, windows-latest]
         python-version: ['3.10', '3.14']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: '0.12.12'
-      - name: Install and test the built wheel
-        run: |
-          uv sync --locked --no-install-project --python '${{ matrix.python-version }}'
-          uv build
-          uv pip install dist/fastcomplete-0.2.0-py3-none-any.whl
-          uv run --no-sync --python '${{ matrix.python-version }}' pytest -q
-
-  integration-proof:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: '0.12.12'
-      - name: Build the prototype
-        run: |
-          uv sync --locked --python 3.12
-          uv build
-      - name: Verify isolated consumer builds, installed completion and wheel upgrade
-        run: |
-          uv run --locked python proof/validate.py --wheel dist/fastcomplete-0.2.0-py3-none-any.whl --output proof/ci-results.json
-      - name: Save distributions and fresh measurements
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: fastcomplete-package-and-validation
-          path: |
-            dist/fastcomplete-*.whl
-            dist/fastcomplete-*.tar.gz
-            proof/ci-results.json
-          if-no-files-found: error
-          retention-days: 14
+      - name: Install test runner
+        run: uv sync --locked --python '${{ matrix.python-version }}'
+      - name: Install and exercise the real CLI with pip
+        run: uv run --locked pytest -q -s

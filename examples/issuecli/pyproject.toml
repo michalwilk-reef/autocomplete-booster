@@ -1,0 +1,27 @@
+[project]
+name = "fastcomplete-issuecli-example"
+version = "0.1.0"
+description = "Small GitHub issues CLI demonstrating fastcomplete integration"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.32",
+    "fastcomplete @ git+https://github.com/michalwilk-reef/autocomplete-booster.git@0066694c43e9e7b5ec07d8cf008467cf911a1ea1",
+]
+
+[project.scripts]
+issuecli = "issuecli.entry:main"
+issuecli-argcomplete = "issuecli.cli:baseline"
+
+[build-system]
+requires = [
+    "setuptools>=77",
+    "requests>=2.32",
+    "fastcomplete[build] @ git+https://github.com/michalwilk-reef/autocomplete-booster.git@0066694c43e9e7b5ec07d8cf008467cf911a1ea1",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.cmdclass]
+build_py = "fastcomplete.setuptools.BuildPy"
+
+[tool.fastcomplete]
+entrypoint = "issuecli.entry:main"

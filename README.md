@@ -1,69 +1,75 @@
 # Fastcomplete
 
-Answer static CLI completions before importing the SDK. A setuptools build hook
-runs the existing argparse parser once and puts a small cache in the wheel.
-Upgrades replace code and cache together; no install hook or runtime source hash.
+Static argparse completion before expensive SDK imports. The wheel build captures
+parser metadata; argcomplete handles shell input/output. No install hook or manual
+cache refresh after upgrades.
 
-## Use
+## Install
 
-Call bootstrap in a lightweight entry module, before SDK imports:
-
-```python
-import fastcomplete
-fastcomplete.bootstrap()
-
-from existing_cli import main
+```bash
+pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git@0066694c43e9e7b5ec07d8cf008467cf911a1ea1"
 ```
 
-Inside the existing CLI, replace `argcomplete.autocomplete(parser)` with
-`fastcomplete.autocomplete(parser)`. Keep parser modules and handlers as they are.
-Parent package initializers must also be lightweight.
+## Real CLI example
 
-Configure the CLI's build:
+[examples/issuecli](examples/issuecli) is an installable GitHub issues client using
+requests:
 
-```toml
-[build-system]
-requires = ["setuptools>=77", "fastcomplete[build]", "requests"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.cmdclass]
-build_py = "fastcomplete.setuptools.BuildPy"
-
-[tool.fastcomplete]
-entrypoint = "my_cli.entry:main"
+```bash
+pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git#subdirectory=examples/issuecli"
+issuecli issues --repo psf/requests --state open --limit 5 --format text
 ```
 
-Add every dependency needed to construct the parser to build requirements, and
-fastcomplete to runtime dependencies. For local experiments, use the built wheel
-as a direct dependency; this package has not been published to PyPI.
+From a local checkout, use `pip install ./examples/issuecli` instead.
 
-## Scope
+Its integration consists of:
 
-The cache stores subcommands, boolean flags and string choices, never handlers
-or parser objects. Lookup uses bisect. Argcomplete handles tokenization, quoting,
-Unicode, cursor position and shell output; this package does not implement its
-own Bash/Zsh/PowerShell protocol. Shell descriptions are omitted.
-Use [argcomplete's registration instructions](https://kislyuk.github.io/argcomplete/).
-Windows depends on its PowerShell integration; native Windows execution has not
-been verified locally.
+1. A lightweight [entry module](examples/issuecli/src/issuecli/entry.py):
 
-This is a static prototype: custom/dynamic parsers and editable builds are not
-implemented. Unsupported completion exits quietly with status 1. Build failures
-remain explicit. There is no automatic argcomplete handoff.
+   ```python
+   import fastcomplete
+   fastcomplete.bootstrap()
+   from .cli import main
+   ```
 
-The trusted `_fastcomplete.cache` sits beside the entry module, one per package
-directory. Use clean build output after deleting modules. Existing SDK-dependent
-parser code runs only during builds and ordinary commands.
+2. `fastcomplete.autocomplete(parser)` in the [existing CLI](examples/issuecli/src/issuecli/cli.py),
+   before `parse_args()`. Its parser still imports the requests-dependent client.
+3. The setuptools hook and build dependencies in [pyproject.toml](examples/issuecli/pyproject.toml).
+   Parser dependencies must be available during isolated builds.
 
-## Check
+Use the usual one-time argcomplete registration:
+
+```bash
+eval "$(register-python-argcomplete issuecli)"
+```
+
+`issuecli-argcomplete` runs the same parser and HTTP client without the bootstrap,
+providing a baseline for comparison. `ISSUECLI_API_URL` selects an alternative API
+endpoint; by default it uses GitHub.
+
+## Test
 
 ```bash
 uv sync --locked
-uv run --locked pytest -q
-uv build
-uv run --locked python proof/validate.py --wheel dist/fastcomplete-0.2.0-py3-none-any.whl
+uv run --locked pytest -q -s
 ```
 
-The proof checks real wheel installs/upgrades and benchmarks against requests.
-[Results](proof/results.json) report machine-dependent timings, including missed
-targets. Argcomplete is the only runtime dependency and is imported only for TAB.
+The tests replace the earlier unit/proof suite. They install the example with pip
+in a fresh environment, fetching fastcomplete from the published Git revision and
+requests from the package index. They make real HTTP requests to a local server,
+compare completion with argcomplete, inspect imports, measure fresh processes,
+and verify that a pip upgrade changes completion automatically. Requests is not
+mocked and no artificial import delay is added.
+
+## Limits
+
+Static subcommands, boolean flags and string choices are supported. Custom/dynamic
+parsers and editable builds are not implemented; unsupported completion exits
+quietly. There is no automatic argcomplete handoff. The trusted cache is adjacent
+to the entry module; keep parent package initializers lightweight and clean build
+output after removing modules.
+
+Shell handling comes from [argcomplete](https://kislyuk.github.io/argcomplete/).
+Bash/Zsh/PowerShell protocol checks are included; native Windows execution is not
+verified locally. Shell descriptions are not cached. Benchmark timings are
+machine-dependent, not performance guarantees.
