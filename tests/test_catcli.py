@@ -208,7 +208,7 @@ def test_pip_upgrade_refreshes_completion(app):
     shutil.copytree(app.source, upgraded,
                     ignore=shutil.ignore_patterns("build", "*.egg-info", "__pycache__"))
     project = upgraded / "pyproject.toml"
-    project.write_text(project.read_text().replace('version = "0.1.0"', 'version = "0.2.0"'))
+    project.write_text(project.read_text().replace('version = "0.2.0"', 'version = "0.3.0"'))
     cli = upgraded / "src/catcli/cli.py"
     cli.write_text(cli.read_text().replace('"--output", default=', '"--output", "--save", default='))
     run(app.python, "-m", "pip", "install", "--disable-pip-version-check", "-U", str(upgraded))
