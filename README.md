@@ -12,19 +12,32 @@ pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git@006
 
 ## Real CLI example
 
-[examples/issuecli](examples/issuecli) is an installable GitHub issues client using
-requests:
+[examples/catcli](examples/catcli) downloads cats from [Cataas](https://cataas.com/)
+using requests:
 
 ```bash
-pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git#subdirectory=examples/issuecli"
-issuecli issues --repo psf/requests --state open --limit 5 --format text
+pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git#subdirectory=examples/catcli"
+catcli
+catcli --tag cute,orange --output cute.jpg
+catcli --gif --output cat.gif
+catcli --tag cute --says "Hello!" --font-size 30 --font-color orange --output hello.jpg
+catcli --gif --says Hello --filter mono --type square --output hello.gif
+catcli --filter custom --brightness 1.2 --saturation 0.5 --hue 90 --lightness 10
+catcli --filter custom --r 255 --g 20 --b 0 --width 320 --height 240
+catcli --html --output cat.html
+catcli --json --output cat.json
 ```
 
-From a local checkout, use `pip install ./examples/issuecli` instead.
+The response is saved as-is to `--output` (default `cat.jpg`); choose the extension
+for the requested format. `--type` and `--filter` have static completion choices.
+`--filter blur` uses the current API’s `blur=1` parameter.
+Other values are passed to the API; free-text and filename completion are unsupported.
+
+From a local checkout, use `pip install ./examples/catcli` instead.
 
 Its integration consists of:
 
-1. A lightweight [entry module](examples/issuecli/src/issuecli/entry.py):
+1. A lightweight [entry module](examples/catcli/src/catcli/entry.py):
 
    ```python
    import fastcomplete
@@ -32,20 +45,20 @@ Its integration consists of:
    from .cli import main
    ```
 
-2. `fastcomplete.autocomplete(parser)` in the [existing CLI](examples/issuecli/src/issuecli/cli.py),
+2. `fastcomplete.autocomplete(parser)` in the [existing CLI](examples/catcli/src/catcli/cli.py),
    before `parse_args()`. Its parser still imports the requests-dependent client.
-3. The setuptools hook and build dependencies in [pyproject.toml](examples/issuecli/pyproject.toml).
+3. The setuptools hook and build dependencies in [pyproject.toml](examples/catcli/pyproject.toml).
    Parser dependencies must be available during isolated builds.
 
 Use the usual one-time argcomplete registration:
 
 ```bash
-eval "$(register-python-argcomplete issuecli)"
+eval "$(register-python-argcomplete catcli)"
 ```
 
-`issuecli-argcomplete` runs the same parser and HTTP client without the bootstrap,
-providing a baseline for comparison. `ISSUECLI_API_URL` selects an alternative API
-endpoint; by default it uses GitHub.
+`catcli-argcomplete` runs the same parser and HTTP client without the bootstrap,
+providing a baseline for comparison. `CATCLI_API_URL` selects an alternative API
+endpoint; by default it uses `https://cataas.com`.
 
 ## Test
 

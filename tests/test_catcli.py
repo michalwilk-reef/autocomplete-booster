@@ -1,7 +1,7 @@
 """Install the real example, call HTTP, complete commands, then upgrade it."""
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import json
+import base64
 import os
 from pathlib import Path
 import re
@@ -15,6 +15,8 @@ from types import SimpleNamespace
 
 import pytest
 
+
+IMAGE = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV = {key: value for key, value in os.environ.items()
@@ -30,9 +32,9 @@ def run(*args, env=ENV):
 
 @pytest.fixture(scope="module")
 def app(tmp_path_factory):
-    root = tmp_path_factory.mktemp("issuecli")
+    root = tmp_path_factory.mktemp("catcli")
     source = root / "source"
-    shutil.copytree(ROOT / "examples/issuecli", source,
+    shutil.copytree(ROOT / "examples/catcli", source,
                     ignore=shutil.ignore_patterns("build", "*.egg-info", "__pycache__"))
     venv = root / "venv"
     run("uv", "venv", "--seed", "--python", sys.executable, str(venv))
@@ -55,9 +57,13 @@ def api():
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             calls.append((self.path, self.headers["Accept"]))
-            body = json.dumps([{"number": 42, "title": "Handle connection timeout"}]).encode()
+            body, content_type = IMAGE, "image/gif"
+            if "json=true" in self.path:
+                body, content_type = b'{"id":"test-cat"}', "application/json"
+            elif "html=true" in self.path:
+                body, content_type = b'<img src="/cat">', "text/html"
             self.send_response(200)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -73,12 +79,12 @@ def api():
         thread.join()
 
 
-def executable(app, name="issuecli"):
+def executable(app, name="catcli"):
     return str(app.scripts / (name + ".exe" if os.name == "nt" else name))
 
 
 def completion(app, arguments, *, baseline=False, shell="bash", extra_env=None):
-    name = "issuecli-argcomplete" if baseline else "issuecli"
+    name = "catcli-argcomplete" if baseline else "catcli"
     line = name + " " + arguments
     output = app.root / "completion.txt"
     env = ENV | {
@@ -100,7 +106,7 @@ from pathlib import Path
 library = distribution('fastcomplete')
 origin = json.loads(library.read_text('direct_url.json'))
 assert origin['url'] == 'https://github.com/michalwilk-reef/autocomplete-booster.git'
-example = distribution('fastcomplete-issuecli-example')
+example = distribution('fastcomplete-catcli-example')
 cache, = [f for f in example.files if f.name == '_fastcomplete.cache']
 assert cache.hash is not None
 assert Path(example.locate_file(cache)).is_file()
@@ -109,32 +115,45 @@ print(origin['vcs_info']['commit_id'])
     assert result.stdout.strip() in (app.source / "pyproject.toml").read_text()
 
 
-@pytest.mark.parametrize("format,expected", [
-    ("text", "#42 Handle connection timeout\n"),
-    ("json", '[{"number": 42, "title": "Handle connection timeout"}]\n'),
+@pytest.mark.parametrize("arguments,path,body", [
+    ([], "/cat", IMAGE),
+    (["--tag", "cute,orange"], "/cat/cute,orange", IMAGE),
+    (["--gif"], "/cat/gif", IMAGE),
+    (["--filter", "blur"], "/cat?blur=1", IMAGE),
+    (["--says", "Hi / cat?"], "/cat/says/Hi%20%2F%20cat%3F", IMAGE),
+    (["--tag", "cute", "--says", "Hello"], "/cat/cute/says/Hello", IMAGE),
+    (["--gif", "--says", "Hello", "--filter", "mono", "--font-color", "orange",
+      "--font-size", "20", "--type", "square"],
+     "/cat/gif/says/Hello?type=square&filter=mono&fontSize=20&fontColor=orange", IMAGE),
+    (["--filter", "custom", "--brightness", "1.2", "--lightness", "10",
+      "--saturation", "0.5", "--hue", "90", "--r", "255", "--g", "20", "--b", "0",
+      "--width", "320", "--height", "240"],
+     "/cat?filter=custom&brightness=1.2&lightness=10&saturation=0.5&hue=90&r=255&g=20&b=0&width=320&height=240", IMAGE),
+    (["--html"], "/cat?html=true", b'<img src="/cat">'),
+    (["--json"], "/cat?json=true", b'{"id":"test-cat"}'),
 ])
-def test_real_requests_call_and_output(app, api, format, expected):
+def test_real_requests_download(app, api, tmp_path, arguments, path, body):
     url, calls = api
-    result = run(executable(app), "issues", "--repo", "acme/widgets",
-                 "--state", "closed", "--limit", "10", "--format", format,
-                 env=ENV | {"ISSUECLI_API_URL": url, "NO_PROXY": "127.0.0.1"})
-    assert result.stdout == expected
-    assert calls == [("/repos/acme/widgets/issues?state=closed&per_page=10",
-                      "application/vnd.github+json")]
+    output = tmp_path / "cat.out"
+    result = run(executable(app), *arguments, "--output", str(output),
+                 env=ENV | {"CATCLI_API_URL": url, "NO_PROXY": "127.0.0.1"})
+    assert result.stdout.strip() == str(output)
+    assert output.read_bytes() == body
+    assert calls == [(path, "application/json" if "--json" in arguments else "*/*")]
 
 
 @pytest.mark.parametrize("shell", ["bash", "zsh", "powershell"])
 def test_completion_matches_argcomplete_without_sdk_or_http(app, api, shell):
     url, calls = api
-    env = {"ISSUECLI_API_URL": url, "PYTHONPROFILEIMPORTTIME": "1"}
-    for arguments in ("", "iss", "issues --st", "issues --state c", 'issues --format "j'):
+    env = {"CATCLI_API_URL": url, "PYTHONPROFILEIMPORTTIME": "1"}
+    for arguments in ("", "--fi", "--filter ", "--filter m", '--type "s', "--gif --filter mono --type "):
         cached, imports, _ = completion(app, arguments, shell=shell, extra_env=env)
         original, original_imports, _ = completion(app, arguments, baseline=True, shell=shell, extra_env=env)
         # Descriptions are not cached. Compare Zsh's candidates independently of them.
         candidates = lambda value: sorted(word.split(":", 1)[0] if shell == "zsh" else word
                                           for word in value.split("\v"))
         assert candidates(cached) == candidates(original)
-        assert not re.search(r"\|\s+(requests|issuecli.cli|issuecli.client)$", imports, re.M)
+        assert not re.search(r"\|\s+(requests|catcli.cli|catcli.client)$", imports, re.M)
         assert re.search(r"\|\s+requests$", original_imports, re.M)
     assert calls == []
 
@@ -142,25 +161,25 @@ def test_completion_matches_argcomplete_without_sdk_or_http(app, api, shell):
 def test_completion_latency(app):
     samples = {False: [], True: []}
     for baseline in samples:
-        completion(app, "issues --state ", baseline=baseline)
+        completion(app, "--filter ", baseline=baseline)
     for index in range(20):
         for baseline in ((False, True) if index % 2 == 0 else (True, False)):
-            _, _, elapsed = completion(app, "issues --state ", baseline=baseline)
+            _, _, elapsed = completion(app, "--filter ", baseline=baseline)
             samples[baseline].append(elapsed)
     cached, original = (statistics.median(samples[key]) for key in (False, True))
-    print(f"\nInstalled issuecli: {cached:.1f} ms cached, {original:.1f} ms argcomplete, {original / cached:.2f}x faster")
+    print(f"\nInstalled catcli: {cached:.1f} ms cached, {original:.1f} ms argcomplete, {original / cached:.2f}x faster")
 
 
 def test_pip_upgrade_refreshes_completion(app):
-    before, _, _ = completion(app, "issues --limit ")
-    assert sorted(before.split("\v")) == ["10", "5"]
+    before, _, _ = completion(app, "--sav")
+    assert before == ""
     upgraded = app.root / "upgraded"
     shutil.copytree(app.source, upgraded,
                     ignore=shutil.ignore_patterns("build", "*.egg-info", "__pycache__"))
     project = upgraded / "pyproject.toml"
     project.write_text(project.read_text().replace('version = "0.1.0"', 'version = "0.2.0"'))
-    cli = upgraded / "src/issuecli/cli.py"
-    cli.write_text(cli.read_text().replace('choices=["5", "10"]', 'choices=["5", "10", "20"]'))
+    cli = upgraded / "src/catcli/cli.py"
+    cli.write_text(cli.read_text().replace('"--output", default=', '"--output", "--save", default='))
     run(app.python, "-m", "pip", "install", "--disable-pip-version-check", "-U", str(upgraded))
-    after, _, _ = completion(app, "issues --limit ")
-    assert sorted(after.split("\v")) == ["10", "20", "5"]
+    after, _, _ = completion(app, "--sav")
+    assert after.strip() == "--save"

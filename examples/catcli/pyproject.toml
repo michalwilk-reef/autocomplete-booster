@@ -1,7 +1,7 @@
 [project]
-name = "fastcomplete-issuecli-example"
+name = "fastcomplete-catcli-example"
 version = "0.1.0"
-description = "Small GitHub issues CLI demonstrating fastcomplete integration"
+description = "Small cat picture CLI demonstrating fastcomplete integration"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.32",
@@ -9,8 +9,8 @@ dependencies = [
 ]
 
 [project.scripts]
-issuecli = "issuecli.entry:main"
-issuecli-argcomplete = "issuecli.cli:baseline"
+catcli = "catcli.entry:main"
+catcli-argcomplete = "catcli.cli:baseline"
 
 [build-system]
 requires = [
@@ -24,4 +24,4 @@ build-backend = "setuptools.build_meta"
 build_py = "fastcomplete.setuptools.BuildPy"
 
 [tool.fastcomplete]
-entrypoint = "issuecli.entry:main"
+entrypoint = "catcli.entry:main"

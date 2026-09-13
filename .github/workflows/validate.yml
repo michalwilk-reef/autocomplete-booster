@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  issuecli:
+  catcli:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
