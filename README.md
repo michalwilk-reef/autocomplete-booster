@@ -7,7 +7,7 @@ cache refresh after upgrades.
 ## Install
 
 ```bash
-pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git@0066694c43e9e7b5ec07d8cf008467cf911a1ea1"
+pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git@8418a133a8d916bf6612d87279736cdb5a61bfa0"
 ```
 
 ## Real CLI example
