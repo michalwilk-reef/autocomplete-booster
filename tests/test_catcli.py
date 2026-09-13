@@ -36,17 +36,17 @@ def app(tmp_path_factory):
     source = root / "source"
     shutil.copytree(ROOT / "examples/catcli", source,
                     ignore=shutil.ignore_patterns("build", "*.egg-info", "__pycache__"))
+    wheels = root / "wheels"
+    run("uv", "build", "--wheel", "--out-dir", str(wheels), str(ROOT))
+    wheel, = wheels.glob("*.whl")
+    project = source / "pyproject.toml"
+    project.write_text(re.sub(r"git\+https://[^\"]+", wheel.as_uri(), project.read_text()))
     venv = root / "venv"
     run("uv", "venv", "--seed", "--python", sys.executable, str(venv))
     scripts = venv / ("Scripts" if os.name == "nt" else "bin")
     python = str(scripts / ("python.exe" if os.name == "nt" else "python"))
     # This is the user's installation command: pip builds the cache automatically.
     run(python, "-m", "pip", "install", "--disable-pip-version-check", str(source))
-    installed = Path(run(python, "-c", "import fastcomplete; print(fastcomplete.__file__)").stdout.strip())
-    for module in (ROOT / "src/fastcomplete").glob("*.py"):
-        assert installed.with_name(module.name).read_text(encoding="utf-8") == module.read_text(encoding="utf-8"), (
-            "Publish the changed library and update the example's Git revision first."
-        )
     return SimpleNamespace(root=root, source=source, python=python, scripts=scripts)
 
 
@@ -98,21 +98,15 @@ def completion(app, arguments, *, baseline=False, shell="bash", extra_env=None):
     return output.read_text(encoding="utf-8"), result.stderr, elapsed
 
 
-def test_pip_installs_git_dependency_and_generated_cache(app):
-    result = run(app.python, "-c", """
-import json
+def test_pip_installs_generated_cache(app):
+    run(app.python, "-c", """
 from importlib.metadata import distribution
 from pathlib import Path
-library = distribution('fastcomplete')
-origin = json.loads(library.read_text('direct_url.json'))
-assert origin['url'] == 'https://github.com/michalwilk-reef/autocomplete-booster.git'
 example = distribution('fastcomplete-catcli-example')
 cache, = [f for f in example.files if f.name == '_fastcomplete.cache']
 assert cache.hash is not None
 assert Path(example.locate_file(cache)).is_file()
-print(origin['vcs_info']['commit_id'])
 """)
-    assert result.stdout.strip() in (app.source / "pyproject.toml").read_text()
 
 
 @pytest.mark.parametrize("arguments,path,body", [

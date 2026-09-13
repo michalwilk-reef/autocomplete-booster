@@ -70,9 +70,8 @@ uv sync --locked
 uv run --locked pytest -q -s
 ```
 
-The tests replace the earlier unit/proof suite. They install the example with pip
-in a fresh environment, fetching fastcomplete from the published Git revision and
-requests from the package index. They make real HTTP requests to a local server,
+The tests replace the earlier unit/proof suite. They build fastcomplete from the current checkout and install its wheel with the
+example in a fresh environment, using real requests and Pillow dependencies. They make real HTTP requests to a local server,
 compare completion with argcomplete, inspect imports, measure fresh processes,
 and verify that a pip upgrade changes completion automatically. Requests is not
 mocked and no artificial import delay is added.

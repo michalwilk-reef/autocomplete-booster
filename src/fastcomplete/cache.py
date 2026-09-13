@@ -1,6 +1,12 @@
 """Build static metadata once; look up sorted candidates during completion."""
 
+import argparse
 from bisect import bisect_left
+import os
+import pickle
+from pathlib import Path
+
+from argcomplete import CompletionFinder
 
 
 class UnsupportedCompletion(ValueError):
@@ -8,9 +14,7 @@ class UnsupportedCompletion(ValueError):
 
 
 def snapshot(parser: object) -> dict:
-    """Extract schema 1 metadata, rejecting unsupported parser definitions."""
-    import argparse
-
+    """Extract schema 2 metadata, rejecting unsupported parser definitions."""
     identity_code = argparse.ArgumentParser(add_help=False)._registries["type"][None].__code__
 
     def extract(current: object) -> dict:
@@ -37,8 +41,6 @@ def snapshot(parser: object) -> dict:
             if action.type is not None and action.type is not str:
                 raise UnsupportedCompletion("custom argument types are unsupported")
             if type(action) is argparse._SubParsersAction:
-                if children:
-                    raise UnsupportedCompletion("multiple subparser actions are unsupported")
                 if any(type(name) is not str or not name or name.startswith("-") for name in action.choices):
                     raise UnsupportedCompletion("subcommands must have non-option names")
                 children = {name: extract(child) for name, child in action.choices.items()}
@@ -65,13 +67,12 @@ def snapshot(parser: object) -> dict:
                 if action.help != argparse.SUPPRESS:
                     visible.append(option)
         return {
-            "options": tuple(sorted(visible)),
+            "candidates": tuple(sorted(set(visible) | children.keys())),
             "actions": actions,
-            "subcommands": tuple(sorted(children)),
             "children": children,
         }
 
-    return {"schema": 1, "root": extract(parser)}
+    return {"schema": 2, "root": extract(parser)}
 
 
 def _choices(action: dict) -> tuple[str, ...]:
@@ -95,7 +96,7 @@ def complete(cache: object, words: list[str]) -> tuple[str, ...]:
     The caller owns shell lexing and escaping. Unknown tokens and unsupported
     contexts are errors; an empty tuple is a successfully established empty answer.
     """
-    if type(cache["schema"]) is not int or cache["schema"] != 1:
+    if type(cache["schema"]) is not int or cache["schema"] != 2:
         raise UnsupportedCompletion("unsupported cache schema")
     node = cache["root"]
     pending = None
@@ -103,7 +104,7 @@ def complete(cache: object, words: list[str]) -> tuple[str, ...]:
         if word == "--":
             raise UnsupportedCompletion("end-of-options is unsupported")
         if pending is not None:
-            if word.startswith("-") or word not in _choices(pending):
+            if word not in _choices(pending):
                 raise UnsupportedCompletion("unsupported or invalid option value")
             pending = None
             continue
@@ -122,4 +123,21 @@ def complete(cache: object, words: list[str]) -> tuple[str, ...]:
         raise UnsupportedCompletion("attached values are unsupported")
     if pending is not None and not prefix.startswith("-"):
         return _prefix(_choices(pending), prefix)
-    return tuple(sorted(set(_prefix(node["options"], prefix) + _prefix(node["subcommands"], prefix))))
+    return _prefix(node["candidates"], prefix)
+
+
+class _CachedFinder(CompletionFinder):
+    def _get_completions(self, words, prefix, prequote, wordbreak):
+        candidates = complete(self.cache, words[1:] + [prefix])
+        self._display_completions = dict.fromkeys(candidates, "")
+        return self.quote_completions(candidates, prequote, wordbreak)
+
+
+def run(entry_file: str) -> None:
+    try:
+        with Path(entry_file).resolve().with_name("_fastcomplete.cache").open("rb") as stream:
+            finder = _CachedFinder()
+            finder.cache = pickle.load(stream)
+        finder(argparse.ArgumentParser(add_help=False))
+    except (OSError, pickle.PickleError, UnsupportedCompletion):
+        os._exit(1)

@@ -1,5 +1,6 @@
 """Explicit setuptools integration for capturing a CLI during wheel builds."""
 
+import importlib
 import math
 import os
 from pathlib import Path
@@ -78,7 +79,7 @@ class BuildPy(build_py):
             with tempfile.TemporaryDirectory(prefix="fastcomplete-pyc-") as bytecode:
                 result = subprocess.run(
                     [sys.executable, "-X", f"pycache_prefix={bytecode}", "-m",
-                     "fastcomplete._capture", entrypoint, str(build_root)],
+                     "fastcomplete.setuptools", entrypoint, str(build_root)],
                     env=environment, capture_output=True, text=True, timeout=timeout,
                 )
             if result.returncode or not cache.is_file():
@@ -95,3 +96,16 @@ class BuildPy(build_py):
         outputs = super().get_outputs(include_bytecode)
         outputs.append(str(self._configuration()[-1]))
         return outputs
+
+
+if __name__ == "__main__":
+    entrypoint, build_lib = sys.argv[1:]
+    sys.path.insert(0, build_lib)
+    module_name, attribute = entrypoint.split(":")
+    module = importlib.import_module(module_name)
+    expected = Path(build_lib).joinpath(*module_name.split(".")).with_suffix(".py")
+    if Path(module.__file__).resolve() != expected:
+        raise RuntimeError("Capture imported an entrypoint outside the built package")
+    sys.argv = [module_name]
+    getattr(module, attribute)()
+    raise RuntimeError("Entrypoint returned without calling fastcomplete.autocomplete")
