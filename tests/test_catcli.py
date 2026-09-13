@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 
-IMAGE = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+IMAGE = base64.b64decode("R0lGODdhAgABAIEAAP8AAAAA/wAAAAAAACwAAAAAAgABAAAIBQABBAgIADs=")
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV = {key: value for key, value in os.environ.items()
@@ -142,19 +142,50 @@ def test_real_requests_download(app, api, tmp_path, arguments, path, body):
     assert calls == [(path, "application/json" if "--json" in arguments else "*/*")]
 
 
+@pytest.mark.parametrize("arguments,size,mode,pixels", [
+    (["--rotate", "90"], (1, 2), "RGB", [(0, 0, 255), (255, 0, 0)]),
+    (["--black-and-white"], (2, 1), "L", [76, 29]),
+    (["--rotate", "90", "--black-and-white"], (1, 2), "L", [29, 76]),
+])
+def test_local_image_operations(app, api, tmp_path, arguments, size, mode, pixels):
+    url, calls = api
+    output = tmp_path / "edited.png"
+    run(executable(app), *arguments, "--output", str(output),
+        env=ENV | {"CATCLI_API_URL": url, "NO_PROXY": "127.0.0.1"})
+    run(app.python, "-c", f"""
+from PIL import Image
+with Image.open({str(output)!r}) as image:
+    assert image.size == {size!r}
+    assert image.mode == {mode!r}
+    assert list(image.getdata()) == {pixels!r}
+""")
+    assert calls == [("/cat", "*/*")]
+
+
+@pytest.mark.parametrize("format", ["--html", "--json"])
+def test_image_operations_reject_non_image_formats(app, api, format):
+    url, calls = api
+    result = subprocess.run([executable(app), format, "--rotate", "90"],
+                            env=ENV | {"CATCLI_API_URL": url}, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "image operations cannot be used" in result.stderr
+    assert calls == []
+
+
 @pytest.mark.parametrize("shell", ["bash", "zsh", "powershell"])
 def test_completion_matches_argcomplete_without_sdk_or_http(app, api, shell):
     url, calls = api
     env = {"CATCLI_API_URL": url, "PYTHONPROFILEIMPORTTIME": "1"}
-    for arguments in ("", "--fi", "--filter ", "--filter m", '--type "s', "--gif --filter mono --type "):
+    for arguments in ("", "--fi", "--filter ", "--filter m", '--type "s', "--gif --filter mono --type ", "--rotate ", "--black-and-white --rotate 9"):
         cached, imports, _ = completion(app, arguments, shell=shell, extra_env=env)
         original, original_imports, _ = completion(app, arguments, baseline=True, shell=shell, extra_env=env)
         # Descriptions are not cached. Compare Zsh's candidates independently of them.
         candidates = lambda value: sorted(word.split(":", 1)[0] if shell == "zsh" else word
                                           for word in value.split("\v"))
         assert candidates(cached) == candidates(original)
-        assert not re.search(r"\|\s+(requests|catcli.cli|catcli.client)$", imports, re.M)
+        assert not re.search(r"\|\s+(requests|PIL(?:\.\w+)?|catcli.cli|catcli.client)$", imports, re.M)
         assert re.search(r"\|\s+requests$", original_imports, re.M)
+        assert re.search(r"\|\s+PIL.Image$", original_imports, re.M)
     assert calls == []
 
 

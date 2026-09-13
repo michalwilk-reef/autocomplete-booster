@@ -13,7 +13,7 @@ pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git@006
 ## Real CLI example
 
 [examples/catcli](examples/catcli) downloads cats from [Cataas](https://cataas.com/)
-using requests:
+using requests and Pillow:
 
 ```bash
 pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git#subdirectory=examples/catcli"
@@ -26,11 +26,14 @@ catcli --filter custom --brightness 1.2 --saturation 0.5 --hue 90 --lightness 10
 catcli --filter custom --r 255 --g 20 --b 0 --width 320 --height 240
 catcli --html --output cat.html
 catcli --json --output cat.json
+catcli --rotate 90 --black-and-white --output portrait.png
 ```
 
 The response is saved as-is to `--output` (default `cat.jpg`); choose the extension
 for the requested format. `--type` and `--filter` have static completion choices.
 `--filter blur` uses the current API’s `blur=1` parameter.
+Local Pillow operations use the first frame and save according to the output extension;
+they cannot be combined with `--html` or `--json`.
 Other values are passed to the API; free-text and filename completion are unsupported.
 
 From a local checkout, use `pip install ./examples/catcli` instead.

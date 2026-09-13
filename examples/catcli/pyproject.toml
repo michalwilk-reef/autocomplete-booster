@@ -5,6 +5,7 @@ description = "Small cat picture CLI demonstrating fastcomplete integration"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.32",
+    "Pillow>=10",
     "fastcomplete @ git+https://github.com/michalwilk-reef/autocomplete-booster.git@0066694c43e9e7b5ec07d8cf008467cf911a1ea1",
 ]
 
@@ -16,6 +17,7 @@ catcli-argcomplete = "catcli.cli:baseline"
 requires = [
     "setuptools>=77",
     "requests>=2.32",
+    "Pillow>=10",
     "fastcomplete[build] @ git+https://github.com/michalwilk-reef/autocomplete-booster.git@0066694c43e9e7b5ec07d8cf008467cf911a1ea1",
 ]
 build-backend = "setuptools.build_meta"
