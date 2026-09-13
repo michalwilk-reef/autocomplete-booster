@@ -1,94 +1,69 @@
-# Autocomplete booster
+# Fastcomplete
 
-A small Python library for keeping expensive command-handler imports out of
-argparse/argcomplete completion. Requires Python 3.10 or newer.
-
-## Install
-
-Install directly from this repository with pip:
-
-```bash
-pip install "git+https://github.com/michalwilk-reef/autocomplete-booster.git"
-```
-
-Or use uv in an existing project:
-
-```bash
-uv add "autocomplete-booster @ git+https://github.com/michalwilk-reef/autocomplete-booster.git"
-```
-
-The package is not published on PyPI. For a reproducible Git installation,
-append `@<commit-sha>` to the repository URL.
+Answer static CLI completions before importing the SDK. A setuptools build hook
+runs the existing argparse parser once and puts a small cache in the wheel.
+Upgrades replace code and cache together; no install hook or runtime source hash.
 
 ## Use
 
-Keep the CLI entry module and parser construction lightweight, and bind
-handlers by name:
+Call bootstrap in a lightweight entry module, before SDK imports:
 
 ```python
-from autocomplete_booster import deferred
+import fastcomplete
+fastcomplete.bootstrap()
 
-subparser.set_defaults(handler=deferred("my_sdk.commands:list_items"))
-
-argcomplete.autocomplete(parser)
-args = parser.parse_args()
-args.handler(args)
+from existing_cli import main
 ```
 
-`deferred` imports the handler module only when the returned callable runs.
-It forwards arguments and return values unchanged. Malformed references fail
-at binding; import, lookup and execution errors propagate at invocation.
+Inside the existing CLI, replace `argcomplete.autocomplete(parser)` with
+`fastcomplete.autocomplete(parser)`. Keep parser modules and handlers as they are.
+Parent package initializers must also be lightweight.
 
-Existing CLIs supply their own argparse/argcomplete integration. Installing
-this library does not rewrite their imports or register Bash completion.
-See [DESIGN.md](DESIGN.md) for a complete integration example and limitations.
+Configure the CLI's build:
 
-## Develop with uv
+```toml
+[build-system]
+requires = ["setuptools>=77", "fastcomplete[build]", "requests"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.cmdclass]
+build_py = "fastcomplete.setuptools.BuildPy"
+
+[tool.fastcomplete]
+entrypoint = "my_cli.entry:main"
+```
+
+Add every dependency needed to construct the parser to build requirements, and
+fastcomplete to runtime dependencies. For local experiments, use the built wheel
+as a direct dependency; this package has not been published to PyPI.
+
+## Scope
+
+The cache stores subcommands, boolean flags and string choices, never handlers
+or parser objects. Lookup uses bisect. Argcomplete handles tokenization, quoting,
+Unicode, cursor position and shell output; this package does not implement its
+own Bash/Zsh/PowerShell protocol. Shell descriptions are omitted.
+Use [argcomplete's registration instructions](https://kislyuk.github.io/argcomplete/).
+Windows depends on its PowerShell integration; native Windows execution has not
+been verified locally.
+
+This is a static prototype: custom/dynamic parsers and editable builds are not
+implemented. Unsupported completion exits quietly with status 1. Build failures
+remain explicit. There is no automatic argcomplete handoff.
+
+The trusted `_fastcomplete.cache` sits beside the entry module, one per package
+directory. Use clean build output after deleting modules. Existing SDK-dependent
+parser code runs only during builds and ordinary commands.
+
+## Check
 
 ```bash
 uv sync --locked
-uv run --locked pytest
+uv run --locked pytest -q
 uv build
+uv run --locked python proof/validate.py --wheel dist/fastcomplete-0.2.0-py3-none-any.whl
 ```
 
-`uv build` produces a wheel and source distribution in `dist/`. The build
-backend is `uv_build`; pip can build the package without a separate uv CLI
-installation. The library has no runtime dependencies.
-
-Install the built wheel with pip:
-
-```bash
-pip install dist/autocomplete_booster-0.1.0-py3-none-any.whl
-```
-
-The package implements the interface proposed in NICE-2925. The experiment
-below exercises the installed wheel, not a duplicate helper implementation.
-
-## Reproduce the experiment
-
-On Linux with uv, Python 3.12, Bash 5 and access to PyPI:
-
-```bash
-uv build
-uv run --locked python proof/validate.py --wheel dist/autocomplete_booster-0.1.0-py3-none-any.whl
-```
-
-The script creates a temporary environment with uv, installs the package wheel
-and two fixture versions through pip, and tests actual argcomplete shell integration. It checks that
-commands, options and choices update after `pip install -U` in the same Bash
-process without registering completion again. It also measures eager versus
-deferred imports using a synthetic 500 ms SDK import.
-
-See [proof/README.md](proof/README.md) for methodology and limitations, and
-[proof/results.json](proof/results.json) for the recorded local results.
-Running the experiment replaces that results file with the new measurements.
-
-## GitHub Actions
-
-[The workflow](.github/workflows/validate.yml) runs on pushes to `main`, pull
-requests and manual dispatch. It builds and tests the wheel on Python 3.10 and
-3.14, executes the integration proof on Python 3.12, and uploads the wheel,
-source distribution and successful run's measurements. No credentials are needed.
-
-CI checks functional assertions, not a machine-independent latency threshold.
-Runner timings are recorded separately from the committed local measurements.
+The proof checks real wheel installs/upgrades and benchmarks against requests.
+[Results](proof/results.json) report machine-dependent timings, including missed
+targets. Argcomplete is the only runtime dependency and is imported only for TAB.

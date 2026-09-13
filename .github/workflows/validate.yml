@@ -1,4 +1,4 @@
-name: Validate autocomplete design
+name: Validate fastcomplete design proof
 
 on:
   push:
@@ -11,10 +11,11 @@ permissions:
 
 jobs:
   unit-tests:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       matrix:
+        os: [ubuntu-24.04, windows-latest]
         python-version: ['3.10', '3.14']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,40 +28,33 @@ jobs:
         run: |
           uv sync --locked --no-install-project --python '${{ matrix.python-version }}'
           uv build
-          uv pip install --python .venv/bin/python dist/autocomplete_booster-0.1.0-py3-none-any.whl
+          uv pip install dist/fastcomplete-0.2.0-py3-none-any.whl
           uv run --no-sync --python '${{ matrix.python-version }}' pytest -q
 
-  validate:
+  integration-proof:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Check out the design and proof
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: '0.12.12'
-
-      - name: Build the installable distributions
+      - name: Build the prototype
         run: |
-          uv sync --locked
+          uv sync --locked --python 3.12
           uv build
-
-      - name: Verify completion, imports, and pip upgrade behavior
+      - name: Verify isolated consumer builds, installed completion and wheel upgrade
         run: |
-          rm proof/results.json
-          uv run --locked python proof/validate.py --wheel dist/autocomplete_booster-0.1.0-py3-none-any.whl
-
-      - name: Save this run's measurements
+          uv run --locked python proof/validate.py --wheel dist/fastcomplete-0.2.0-py3-none-any.whl --output proof/ci-results.json
+      - name: Save distributions and fresh measurements
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: autocomplete-package-and-validation
+          name: fastcomplete-package-and-validation
           path: |
-            dist/*.whl
-            dist/*.tar.gz
-            proof/results.json
+            dist/fastcomplete-*.whl
+            dist/fastcomplete-*.tar.gz
+            proof/ci-results.json
           if-no-files-found: error
           retention-days: 14
