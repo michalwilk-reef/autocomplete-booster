@@ -34,7 +34,7 @@ for the requested format. `--type` and `--filter` have static completion choices
 `--filter blur` uses the current API’s `blur=1` parameter.
 Local Pillow operations use the first frame and save according to the output extension;
 they cannot be combined with `--html` or `--json`.
-Other values are passed to the API; free-text and filename completion are unsupported.
+Other values are passed to the API; free-text and filename completion fall back to argcomplete.
 
 From a local checkout, use `pip install ./examples/catcli` instead.
 
@@ -79,8 +79,9 @@ mocked and no artificial import delay is added.
 ## Limits
 
 Static subcommands, boolean flags and string choices are supported. Custom/dynamic
-parsers and editable builds are not implemented; unsupported completion exits
-quietly. There is no automatic argcomplete handoff. The trusted cache is adjacent
+parsers and editable builds cannot use the static cache. Missing, unreadable or
+invalid caches and unsupported completion contexts fall back to argcomplete using
+the application's argparse parser, including its usual imports. The trusted cache is adjacent
 to the entry module; keep parent package initializers lightweight and clean build
 output after removing modules.
 

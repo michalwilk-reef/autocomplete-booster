@@ -5,6 +5,7 @@ from bisect import bisect_left
 import os
 import pickle
 from pathlib import Path
+import sys
 
 from argcomplete import CompletionFinder
 
@@ -127,6 +128,15 @@ def complete(cache: object, words: list[str]) -> tuple[str, ...]:
 
 
 class _CachedFinder(CompletionFinder):
+    def _init_debug_stream(self):
+        from argcomplete import io
+
+        # The fallback must be able to reuse the shell's debug descriptor.
+        try:
+            io.debug_stream = os.fdopen(9, "w", closefd=False)
+        except OSError:
+            io.debug_stream = sys.stderr
+
     def _get_completions(self, words, prefix, prequote, wordbreak):
         candidates = complete(self.cache, words[1:] + [prefix])
         self._display_completions = dict.fromkeys(candidates, "")
@@ -138,6 +148,13 @@ def run(entry_file: str) -> None:
         with Path(entry_file).resolve().with_name("_fastcomplete.cache").open("rb") as stream:
             finder = _CachedFinder()
             finder.cache = pickle.load(stream)
-        finder(argparse.ArgumentParser(add_help=False))
-    except (OSError, pickle.PickleError, UnsupportedCompletion):
-        os._exit(1)
+        parser = argparse.ArgumentParser(add_help=False)
+        if "_ARGCOMPLETE_STDOUT_FILENAME" in os.environ:
+            finder(parser)
+        else:
+            # Keep the shell's completion descriptor open for the fallback.
+            with os.fdopen(8, "w", closefd=False) as output:
+                finder(parser, output_stream=output)
+    except (OSError, pickle.PickleError, EOFError, ValueError, TypeError, LookupError, AttributeError, ImportError):
+        # Let the entry module load the real parser for argcomplete's fallback.
+        return
